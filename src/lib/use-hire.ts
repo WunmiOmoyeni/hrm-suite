@@ -16,9 +16,17 @@ export function useHire() {
       return null;
     }
     toast.success(`${name} hired. Employee record created.`, {
+      duration: 10000,
       action: {
-        label: "View profile",
-        onClick: () => router.push(`/employees/${employeeId}`),
+        label: "Assign kit & view",
+        onClick: () => {
+          const { assigned, unavailable } =
+            useStore.getState().assignStandardKit(employeeId);
+          if (assigned.length) toast.success(`Assigned: ${assigned.join(", ")}`);
+          if (unavailable.length)
+            toast.error(`Out of stock: ${unavailable.join(", ")}`);
+          router.push(`/employees/${employeeId}`);
+        },
       },
     });
     return employeeId;

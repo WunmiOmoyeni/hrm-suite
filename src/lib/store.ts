@@ -20,6 +20,7 @@ import {
   seedInventory,
   seedJobs,
 } from "./seed";
+import { STANDARD_KIT_SKUS } from "./kit";
 
 const uid = () => Math.random().toString(36).slice(2, 10);
 const today = () => new Date().toISOString().slice(0, 10);
@@ -52,8 +53,11 @@ interface Actions {
     employeeId: string,
     qty?: number
   ) => { ok: boolean; error?: string };
-  
   returnAssignment: (assignmentId: string) => void;
+  assignStandardKit: (employeeId: string) => {
+    assigned: string[];
+    unavailable: string[];
+  };
   // Demo
   resetDemo: () => void;
 }
@@ -78,12 +82,41 @@ export const useStore = create<DataState & Actions>()(
         return id;
       },
 
+      // Terminating an employee returns their equipment to stock
       updateEmployee: (id, patch) =>
-        set((s) => ({
-          employees: s.employees.map((e) =>
+        set((s) => {
+          const prev = s.employees.find((e) => e.id === id);
+          const employees = s.employees.map((e) =>
             e.id === id ? { ...e, ...patch } : e
-          ),
-        })),
+          );
+
+          const terminating =
+            !!prev &&
+            prev.status !== "TERMINATED" &&
+            patch.status === "TERMINATED";
+          if (!terminating) return { employees };
+
+          const toReturn = s.assignments.filter(
+            (a) => a.employeeId === id && !a.returnedAt
+          );
+          if (toReturn.length === 0) return { employees };
+
+          const date = today();
+          return {
+            employees,
+            assignments: s.assignments.map((a) =>
+              a.employeeId === id && !a.returnedAt
+                ? { ...a, returnedAt: date }
+                : a
+            ),
+            inventory: s.inventory.map((i) => {
+              const back = toReturn
+                .filter((a) => a.itemId === i.id)
+                .reduce((n, a) => n + a.quantity, 0);
+              return back ? { ...i, quantity: i.quantity + back } : i;
+            }),
+          };
+        }),
 
       addJob: (j) => set((s) => ({ jobs: [...s.jobs, { ...j, id: uid() }] })),
 
@@ -190,6 +223,25 @@ export const useStore = create<DataState & Actions>()(
             i.id === a.itemId ? { ...i, quantity: i.quantity + a.quantity } : i
           ),
         }));
+      },
+
+      assignStandardKit: (employeeId) => {
+        const assigned: string[] = [];
+        const unavailable: string[] = [];
+        for (const sku of STANDARD_KIT_SKUS) {
+          const item = get().inventory.find((i) => i.sku === sku);
+          if (!item) continue;
+          const alreadyHas = get().assignments.some(
+            (a) =>
+              a.employeeId === employeeId &&
+              a.itemId === item.id &&
+              !a.returnedAt
+          );
+          if (alreadyHas) continue;
+          const result = get().assignItem(item.id, employeeId, 1);
+          (result.ok ? assigned : unavailable).push(item.name);
+        }
+        return { assigned, unavailable };
       },
 
       resetDemo: () => set(initialData()),

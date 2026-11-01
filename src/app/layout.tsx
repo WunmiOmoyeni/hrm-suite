@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import "./globals.css";
 import { Sidebar } from "@/components/sidebar";
-import {Toaster} from "@/components/ui/sonner";
+import { Toaster } from "@/components/ui/sonner";
 
 export const metadata: Metadata = {
   title: "HR Suite",
@@ -17,7 +18,11 @@ export default function RootLayout({
     <html lang="en">
       <body className="antialiased">
         <div className="flex min-h-screen">
-          <Sidebar />
+          <Suspense
+            fallback={<aside className="w-60 shrink-0 border-r bg-background" />}
+          >
+            <Sidebar />
+          </Suspense>
           <main className="flex-1 bg-muted/30 p-8">{children}</main>
         </div>
         <Toaster />

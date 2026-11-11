@@ -49,6 +49,20 @@ export interface Applicant {
   notes: string;
   jobId: string;
   employeeId?: string; // set when hired
+  phone?: string;
+  experience?: string;
+  source?: "APPLICATION_SITE" | "MANUAL";
+  aiScore?: number;
+  aiSummary?: string;
+}
+
+export interface SentEmail {
+  id: string;
+  applicantId: string;
+  to: string;
+  subject: string;
+  body: string;
+  sentAt: string; // ISO datetime
 }
 
 export interface InventoryItem {

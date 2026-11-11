@@ -10,8 +10,10 @@ import type {
   Employee,
   InventoryItem,
   Job,
+  SentEmail,
   Stage,
 } from "./types";
+import type { ScreeningResult } from "./ai-screen";
 import {
   seedApplicants,
   seedAssignments,
@@ -32,6 +34,7 @@ interface DataState {
   applicants: Applicant[];
   inventory: InventoryItem[];
   assignments: AssetAssignment[];
+  emails: SentEmail[];
 }
 
 interface Actions {
@@ -42,6 +45,10 @@ interface Actions {
   addJob: (j: Omit<Job, "id">) => void;
   updateJob: (id: string, patch: Partial<Job>) => void;
   addApplicant: (a: Pick<Applicant, "name" | "email" | "jobId">) => void;
+  addApplication: (
+    a: Pick<Applicant, "name" | "email" | "jobId" | "phone" | "experience">,
+    screening: ScreeningResult
+  ) => void;
   moveApplicant: (id: string, stage: Stage) => void;
   updateApplicantNotes: (id: string, notes: string) => void;
   hireApplicant: (id: string) => string | null; // returns new employee id
@@ -69,6 +76,7 @@ const initialData = (): DataState => ({
   applicants: seedApplicants,
   inventory: seedInventory,
   assignments: seedAssignments,
+  emails: [],
 });
 
 export const useStore = create<DataState & Actions>()(
@@ -125,20 +133,60 @@ export const useStore = create<DataState & Actions>()(
           jobs: s.jobs.map((j) => (j.id === id ? { ...j, ...patch } : j)),
         })),
 
+      // Manual add by HR (goes straight into Applied)
       addApplicant: (a) =>
         set((s) => ({
           applicants: [
             ...s.applicants,
-            { ...a, id: uid(), stage: "APPLIED", notes: "" },
+            { ...a, id: uid(), stage: "APPLIED", notes: "", source: "MANUAL" },
           ],
         })),
 
-      moveApplicant: (id, stage) =>
+      // Public application site: the AI result decides Applied vs Rejected
+      addApplication: (a, screening) =>
         set((s) => ({
-          applicants: s.applicants.map((a) =>
-            a.id === id ? { ...a, stage } : a
-          ),
+          applicants: [
+            ...s.applicants,
+            {
+              id: uid(),
+              name: a.name,
+              email: a.email,
+              jobId: a.jobId,
+              phone: a.phone,
+              experience: a.experience,
+              source: "APPLICATION_SITE",
+              aiScore: screening.score,
+              aiSummary: screening.summary,
+              stage: screening.passed ? "APPLIED" : "REJECTED",
+              notes: screening.passed ? "" : "Not selected by AI screening.",
+            },
+          ],
         })),
+
+      // Moving someone to Screening automatically "sends" an interview email
+      moveApplicant: (id, stage) =>
+        set((s) => {
+          const applicant = s.applicants.find((a) => a.id === id);
+          if (!applicant || applicant.stage === stage) return {};
+
+          const applicants = s.applicants.map((a) =>
+            a.id === id ? { ...a, stage } : a
+          );
+          if (stage !== "SCREENING") return { applicants };
+
+          const job = s.jobs.find((j) => j.id === applicant.jobId);
+          const email: SentEmail = {
+            id: uid(),
+            applicantId: id,
+            to: applicant.email,
+            subject: `Interview invitation: ${job?.title ?? "your application"}`,
+            body: `Hi ${applicant.name.split(" ")[0]},\n\nThank you for applying${
+              job ? ` for ${job.title}` : ""
+            }. We'd like to invite you to an interview. Please reply with times that suit you this week.\n\nBest regards,\nHR Team`,
+            sentAt: new Date().toISOString(),
+          };
+          return { applicants, emails: [email, ...s.emails] };
+        }),
 
       updateApplicantNotes: (id, notes) =>
         set((s) => ({

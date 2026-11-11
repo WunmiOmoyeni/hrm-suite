@@ -25,6 +25,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { PASS_MARK } from "@/lib/ai-screen";
 import { useHydrated, useStore } from "@/lib/store";
 import { useHire } from "@/lib/use-hire";
 import { STAGES, type Applicant, type Stage } from "@/lib/types";
@@ -59,6 +60,15 @@ function ApplicantCard({
         {a.name}
       </button>
       <div className="text-xs text-muted-foreground">{a.email}</div>
+      {a.aiScore !== undefined && (
+        <Badge
+          variant={a.aiScore >= PASS_MARK ? "secondary" : "outline"}
+          className="mt-2"
+          title={a.aiSummary}
+        >
+          AI score {a.aiScore}
+        </Badge>
+      )}
       {showJob && <div className="mt-1 text-xs">{jobTitle}</div>}
       {a.notes && (
         <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">
@@ -138,9 +148,10 @@ function RecruitmentView() {
   const jobs = useStore((s) => s.jobs);
   const applicants = useStore((s) => s.applicants);
   const departments = useStore((s) => s.departments);
+  const emails = useStore((s) => s.emails);
   const updateJob = useStore((s) => s.updateJob);
 
-  const [view, setView] = useState<"pipeline" | "jobs">("pipeline");
+  const [view, setView] = useState<"pipeline" | "jobs" | "emails">("pipeline");
   const [jobFilter, setJobFilter] = useState("ALL");
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
@@ -196,6 +207,13 @@ function RecruitmentView() {
           >
             Jobs
           </Button>
+          <Button
+            variant={view === "emails" ? "default" : "outline"}
+            size="sm"
+            onClick={() => setView("emails")}
+          >
+            Sent emails ({emails.length})
+          </Button>
         </div>
 
         {view === "pipeline" && (
@@ -248,7 +266,7 @@ function RecruitmentView() {
             );
           })}
         </div>
-      ) : (
+      ) : view === "jobs" ? (
         <Card>
           <Table>
             <TableHeader>
@@ -319,6 +337,26 @@ function RecruitmentView() {
               })}
             </TableBody>
           </Table>
+        </Card>
+      ) : (
+        <Card className="divide-y">
+          {emails.length === 0 && (
+            <p className="p-6 text-center text-sm text-muted-foreground">
+              No emails sent yet. Move a candidate to Screening to trigger one.
+            </p>
+          )}
+          {emails.map((m) => (
+            <div key={m.id} className="space-y-1 p-4">
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>To: {m.to}</span>
+                <span>{new Date(m.sentAt).toLocaleString()}</span>
+              </div>
+              <div className="text-sm font-medium">{m.subject}</div>
+              <p className="whitespace-pre-line text-sm text-muted-foreground">
+                {m.body}
+              </p>
+            </div>
+          ))}
         </Card>
       )}
 
